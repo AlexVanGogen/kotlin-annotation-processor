@@ -1,0 +1,2 @@
+rootProject.name = 'kotlin-annotation-processor'
+include 'app', 'library', 'processor'
