@@ -82,8 +82,8 @@ Declared explicitly: yes
 \--- Value parameters: 
 	\--- v: kotlin/collections/MutableMap<out V, kotlin/collections/Map<T, kotlin/collections/List<*>>>
 \--- Type parameters: 
-	\--- U, id: 1, variance: INVARIANT, upper bound: T
-	\--- V, id: 2, variance: INVARIANT, upper bound: U
+	\--- U, upper bound: T
+	\--- V, upper bound: U
 Function nextFun
 Declared explicitly: yes
 \--- Modifiers: inline
@@ -92,8 +92,8 @@ Declared explicitly: yes
 \--- Return type: kotlin/Unit
 \--- Value parameters: none
 \--- Type parameters: 
-	\--- T, id: 1, variance: INVARIANT, upper bound: null
-	\--- S, id: 2, variance: INVARIANT, upper bound: T
+	\--- T, upper bound: null
+	\--- S, upper bound: T
 ```
 
 For more details see [`ExampleProcessor.process`](https://github.com/AlexVanGogen/kotlin-annotation-processor/blob/master/processor/src/main/kotlin/summer/practice/kapt/ExampleProcessor.kt) method.

@@ -126,7 +126,7 @@ class ExampleProcessor: KAbstractProcessor() {
                             .addLine("Type parameters: ${if (it.typeParameters.isEmpty()) "none" else ""}", 1)
                     for (type in it.typeParameters)
                         if (!type.hasAnnotation(ignoreParameter))
-                            functionsFile.addLine("${type.name}, id: ${type.id}, variance: ${type.variance}, upper bound: ${type.upperBound?.kotlinName}", 2)
+                            functionsFile.addLine("${type.name}, upper bound: ${type.upperBound?.kotlinName}", 2)
                 }
 
         val aliasesFile = File("aliases.txt")
