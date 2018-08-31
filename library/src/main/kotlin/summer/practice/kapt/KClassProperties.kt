@@ -330,7 +330,7 @@ class KotlinType: KotlinElement() {
             return null
         }
 
-    val kotlinName: String? get() = name + if (isNullable()) "?" else ""
+    val kotlinName: String? get() = "$name${if (arguments.isNotEmpty()) "<${arguments.joinToString { it.toString() }}>" else ""}${if (isNullable()) "?" else ""}"
 
     fun isNullable(): Boolean = Flag.Type.IS_NULLABLE(flags ?: 0)
     fun isSuspend(): Boolean = Flag.Type.IS_SUSPEND(flags ?: 0)
