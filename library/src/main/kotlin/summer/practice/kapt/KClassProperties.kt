@@ -59,8 +59,12 @@ enum class ElementVisibility {
 
 sealed class KotlinElement {
     var flags: Flags? = null
+        internal set
+
     var enclosingElement: KotlinElement? = null
-    internal var annotations: MutableSet<Annotation> = mutableSetOf()
+        internal set
+
+    private val annotations: MutableSet<Annotation> = mutableSetOf()
 
     val visibilityModifier: ElementVisibility
         get() {
@@ -76,7 +80,8 @@ sealed class KotlinElement {
 
     private val Annotation.simpleName: String get() = toString().take(toString().indexOfFirst { it == '(' }).drop(1)
 
-    fun addAnnotation(annotation: Annotation) = annotations.add(annotation)
+    internal fun addAnnotation(annotation: Annotation) = annotations.add(annotation)
+
     fun <T: Annotation> getAnnotation(annotationClass: AnnotationClass): T? = annotations.find {
         it.simpleName == annotationClass.name
     } as? T
@@ -92,20 +97,28 @@ sealed class KotlinElement {
 }
 
 open class KotlinDeclarationContainer: KotlinElement() {
-    var functions: MutableList<KotlinFunction> = mutableListOf()
-    var properties: MutableList<KotlinProperty> = mutableListOf()
-    var typeAliases: MutableList<KotlinTypeAlias> = mutableListOf()
+    val functions: MutableList<KotlinFunction> = mutableListOf()
+    val properties: MutableList<KotlinProperty> = mutableListOf()
+    val typeAliases: MutableList<KotlinTypeAlias> = mutableListOf()
 }
 
 class KotlinClass: KotlinDeclarationContainer() {
     var name: ClassName? = null
+        internal set
+
     var supertype: KotlinType? = null
+        internal set
+
     var typeParameters: MutableList<KotlinTypeParameter> = mutableListOf()
-    var companionObjectsNames: MutableList<String> = mutableListOf()
-    var nestedClassesNames: MutableList<String> = mutableListOf()
-    var enumEntriesNames: MutableList<String> = mutableListOf()
-    var sealedClassesNames: MutableList<ClassName> = mutableListOf()
-    var constructors: MutableList<KotlinConstructor> = mutableListOf()
+        internal set
+
+    var companionObjectName: String? = null
+        internal set
+
+    val nestedClassesNames: MutableList<String> = mutableListOf()
+    val enumEntriesNames: MutableList<String> = mutableListOf()
+    val sealedClassesNames: MutableList<ClassName> = mutableListOf()
+    val constructors: MutableList<KotlinConstructor> = mutableListOf()
 
     fun isCommonClass(): Boolean = Flag.Class.IS_CLASS(flags ?: 0)
     fun isInterface(): Boolean = Flag.Class.IS_INTERFACE(flags ?: 0)
@@ -128,10 +141,11 @@ class KotlinPackage: KotlinDeclarationContainer() {
 
 class KotlinLambda: KotlinElement() {
     var wrappedFunction: KotlinFunction? = null
+        internal set
 }
 
 class KotlinConstructor: KotlinElement() {
-    var valueParameters: MutableList<KotlinValueParameter> = mutableListOf()
+    val valueParameters: MutableList<KotlinValueParameter> = mutableListOf()
 
     val typeRepresentation: String get() {
         val valueParameters = valueParameters.map { it.type?.javaName }.joinToString(",")
@@ -151,10 +165,17 @@ class KotlinConstructor: KotlinElement() {
 
 class KotlinFunction: KotlinElement() {
     var name: String? = null
-    var typeParameters: MutableList<KotlinTypeParameter> = mutableListOf()
+        internal set
+
+    val typeParameters: MutableList<KotlinTypeParameter> = mutableListOf()
+
     var receiverParameterType: KotlinType? = null
-    var valueParameters: MutableList<KotlinValueParameter> = mutableListOf()
+        internal set
+
+    val valueParameters: MutableList<KotlinValueParameter> = mutableListOf()
+
     var returnType: KotlinType? = null
+        internal set
 
     val typeRepresentation: String get() {
         val typeParameters = if (typeParameters.isNotEmpty()) "<${typeParameters.map { it.name }.joinToString(",")}>" else ""
@@ -180,12 +201,24 @@ class KotlinFunction: KotlinElement() {
 
 class KotlinProperty: KotlinElement() {
     var name: String? = null
+        internal set
+
     var getterFlags: Flags? = null
+        internal set
+
     var setterFlags: Flags? = null
-    var typeParameters: MutableList<KotlinTypeParameter> = mutableListOf()
+        internal set
+
+    val typeParameters: MutableList<KotlinTypeParameter> = mutableListOf()
+
     var receiverParameterType: KotlinType? = null
-    var settersParameters: MutableList<KotlinValueParameter> = mutableListOf()
+        internal set
+
+    var setterParameter: KotlinValueParameter? = null
+        internal set
+
     var returnType: KotlinType? = null
+        internal set
 
     fun isExplicitlyDeclared(): Boolean = Flag.Property.IS_DECLARATION(flags ?: 0)
     fun isDelegation(): Boolean = Flag.Property.IS_DELEGATION(flags ?: 0)
@@ -220,16 +253,28 @@ class KotlinPropertySetter(val property: KotlinProperty)
 
 class KotlinTypeAlias: KotlinElement() {
     var name: String? = null
-    var typeParameters: MutableList<KotlinTypeParameter> = mutableListOf()
+        internal set
+
+    val typeParameters: MutableList<KotlinTypeParameter> = mutableListOf()
+
     var underlyingType: KotlinType? = null
+        internal set
+
     var expandedType: KotlinType? = null
-    var kAnnotations: MutableList<KmAnnotation> = mutableListOf()
+        internal set
+
+    val kAnnotations: MutableList<KmAnnotation> = mutableListOf()
 }
 
 class KotlinValueParameter: KotlinElement() {
     var name: String? = null
+        internal set
+
     var type: KotlinType? = null
+        internal set
+
     var varargType: KotlinType? = null
+        internal set
 
     fun declaresDefaultValue(): Boolean = Flag.ValueParameter.DECLARES_DEFAULT_VALUE(flags ?: 0)
     fun isCrossInline(): Boolean = Flag.ValueParameter.IS_CROSSINLINE(flags ?: 0)
@@ -253,15 +298,30 @@ class KotlinValueParameter: KotlinElement() {
 
 class KotlinType: KotlinElement() {
     var name: String? = null
+        internal set
+
     var abbreviatedType: KotlinType? = null
+        internal set
+
     var flexibleTypeUpperBound: KotlinType? = null
+        internal set
+
     var kind: KotlinTypeKind? = null
+        internal set
+
     var typeFlexibilityId: String? = null
+        internal set
+
     val arguments: MutableList<KotlinType> = mutableListOf()
+
     var outerClassType: KotlinType? = null
+        internal set
 
     var typeParameterId: Int? = null
+        internal set
+
     var variance: KmVariance? = null
+        internal set
 
     val javaName: String? get() {
         return when (name) {
@@ -297,13 +357,6 @@ class KotlinType: KotlinElement() {
         return result
     }
 
-    companion object {
-        val STAR_PROJECTION = KotlinType()
-        init {
-            STAR_PROJECTION.name = "*"
-        }
-    }
-
     val wrappedTypeParameter: KotlinTypeParameter?
         get() {
             val nestedElementsStack = mutableListOf<KotlinElement>()
@@ -319,7 +372,6 @@ class KotlinType: KotlinElement() {
             }
             var id = typeParameterId!!
             for (lowerElement in nestedElementsStack.asReversed()) {
-//                File("haha.txt").appendText("${(lowerElement as? KotlinFunction)?.typeParameters?.size ?: (lowerElement as? KotlinClass)?.typeParameters?.size} $typeParameterId\n")
                 when (lowerElement) {
                     is KotlinClass -> if (lowerElement.typeParameters.size <= id) id -= lowerElement.typeParameters.size else return lowerElement.typeParameters[id]
                     is KotlinTypeAlias -> if (lowerElement.typeParameters.size <= id) id -= lowerElement.typeParameters.size else return lowerElement.typeParameters[id]
@@ -334,14 +386,28 @@ class KotlinType: KotlinElement() {
 
     fun isNullable(): Boolean = Flag.Type.IS_NULLABLE(flags ?: 0)
     fun isSuspend(): Boolean = Flag.Type.IS_SUSPEND(flags ?: 0)
+
+    companion object {
+        val STAR_PROJECTION = KotlinType()
+        init {
+            STAR_PROJECTION.name = "*"
+        }
+    }
 }
 
-data class KotlinTypeParameter(
-        var name: String? = null,
-        var id: Int? = null,
-        var variance: KmVariance? = null,
-        var upperBound: KotlinType? = null
-): KotlinElement() {
+class KotlinTypeParameter: KotlinElement() {
+
+    var name: String? = null
+        internal set
+
+    var id: Int? = null
+        internal set
+
+    var variance: KmVariance? = null
+        internal set
+
+    var upperBound: KotlinType? = null
+        internal set
 
     fun isReified(): Boolean = Flag.TypeParameter.IS_REIFIED(flags ?: 0)
 
@@ -574,7 +640,7 @@ class KotlinPropertyVisitor: KmPropertyVisitor() {
             this.flags = flags
             this.enclosingElement = kotlinProperty
         }
-        kotlinProperty.settersParameters.add(vpType.kotlinValueParameter)
+        kotlinProperty.setterParameter = vpType.kotlinValueParameter
         return vpType
     }
 
@@ -714,7 +780,7 @@ class KotlinClassVisitor: KmClassVisitor() {
     }
 
     override fun visitCompanionObject(name: String) {
-        kotlinClass.companionObjectsNames.add(name)
+        kotlinClass.companionObjectName = name
     }
 
     override fun visitConstructor(flags: Flags): KmConstructorVisitor? {
