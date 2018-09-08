@@ -36,7 +36,7 @@ abstract class KAbstractProcessor: AbstractProcessor() {
         if (this !in handledKotlinElements) {
             handledKotlinElements.add(this)
             if (isKotlinElement()) {
-                val declarationContainer = KotlinClassMetadata.read(getKotlinClassMetadata()!!)!!.collectKotlinSpecificInformationFromClass()
+                val declarationContainer = KotlinClassMetadata.read(getKotlinClassMetadata() ?: throw InvalidMetadataException()).collectKotlinSpecificInformationFromClass()
                 if (declarationContainer is KotlinPackage)
                     declarationContainer.name = canonicalName
                 handledKotlinClasses.add(declarationContainer)
@@ -65,6 +65,12 @@ abstract class KAbstractProcessor: AbstractProcessor() {
      */
     fun RoundEnvironment.preprocess() {
         rootElements.forEach { it.visitClass() }
+        handledKotlinClasses.forEach {
+            when (it) {
+                is KotlinClass -> it.bindNestedTypeParametersWithWrappingType()
+                is KotlinPackage -> it.bindNestedTypeParametersWithWrappingType()
+            }
+        }
         supportedAnnotations.forEach { annotationMappings[it] = getKotlinElementsAnnotatedWith(it) }
     }
 
@@ -75,18 +81,18 @@ abstract class KAbstractProcessor: AbstractProcessor() {
             if (annotationMappings[annotationClass] == null) {
                 rootElements
                         .filter { it.isKotlinElement() }
-                        .flatMap { it.getEnclosedElementsAnnotatedWith(annotationClass, handledKotlinClasses.findAppropriateClass(it)!!) }
+                        .flatMap { it.getEnclosedElementsAnnotatedWith(annotationClass, handledKotlinClasses.findAppropriateClass(it)) }
                         .toSet()
                         .plus(
                                 rootElements
                                         .filter { it.getAnnotation(annotationClass) != null }
-                                        .map { handledKotlinClasses.findAppropriateClass(it)!! }
+                                        .map { handledKotlinClasses.findAppropriateClass(it) }
                                         .toSet()
                         )
                         .toSet()
                         .plus(handledKotlinClasses.flatMap { it.typeAliases.filter { alias ->
                             annotationClass.name in alias.kAnnotations.map { annotation -> annotation.className.replace('/', '.') } } })
-            } else annotationMappings[annotationClass]!!
+            } else annotationMappings[annotationClass] ?: throw UnsupportedAnnotationException("Annotation not found: ${annotationClass.name}")
 
     /**
      * Visits all subelements of receiver and receives those that marked with [annotationClass].
@@ -149,19 +155,21 @@ abstract class KAbstractProcessor: AbstractProcessor() {
 
     /**
      * Finds top-level class among classes in [handledKotlinClasses], appropriate to Java class [element].
-     * @return appropriate class, or null if it has not found.
+     * @return appropriate class
+     * @throws KotlinClassNotFoundException if class has not found
      */
-    private fun MutableSet<out KotlinElement>.findAppropriateClass(element: Element): KotlinDeclarationContainer? =
+    private fun MutableSet<out KotlinElement>.findAppropriateClass(element: Element): KotlinDeclarationContainer =
             find {
                 it is KotlinClass && it.name == element.canonicalName
                         || it is KotlinPackage && it.name == element.canonicalName
-            } as? KotlinDeclarationContainer
+            } as? KotlinDeclarationContainer ?: throw KotlinClassNotFoundException("Class not found: ${element.canonicalName}")
 
     /**
      * Finds function, or property, or property getter/setter among elements inside [handledKotlinClasses], appropriate to [element].
-     * @return appropriate Kotlin element, or null if it has not found.
+     * @return appropriate Kotlin element
+     * KotlinClassNotFoundException if function/property has not found
      */
-    private fun KotlinElement.getAppropriateFunctionOrProperty(element: Element): KotlinElement? {
+    private fun KotlinElement.getAppropriateFunctionOrProperty(element: Element): KotlinElement {
         element.simpleName.run {
             // Deprecated
             if (endsWith("\$annotations"))
@@ -191,49 +199,39 @@ abstract class KAbstractProcessor: AbstractProcessor() {
      * when finds property marked with annotation.
      * @return appropriate property, or null if it has not found.
      */
-    private fun KotlinElement.getAppropriatePropertyByName(propertyName: String): KotlinProperty? {
+    private fun KotlinElement.getAppropriatePropertyByName(propertyName: String): KotlinProperty {
         return if (this is KotlinDeclarationContainer)
             properties.find { it.name + "\$kAnnotations" == propertyName } ?: getAppropriatePropertyGetterOrSetterByName(propertyName)
-        else null
+        else throw KotlinPropertyNotFoundException("Property not found: $propertyName")
     }
 
     /**
      * Finds property getter/setter among elements inside [handledKotlinClasses], appropriate to Java method with name [propertyName].
      * @return appropriate property, or null if it has not found.
      */
-    private fun KotlinElement.getAppropriatePropertyGetterOrSetterByName(propertyName: String): KotlinProperty? {
-        return if (this is KotlinDeclarationContainer)
-            properties.find { it.name == propertyName }
-        else null
-    }
+    private fun KotlinElement.getAppropriatePropertyGetterOrSetterByName(propertyName: String): KotlinProperty =
+            (this as? KotlinDeclarationContainer)?.properties?.find { it.name == propertyName } ?: throw KotlinPropertyGetterOrSetterNotFoundException("Getter/setter for property $propertyName not found")
+
 
     /**
      * Finds function among elements inside [handledKotlinClasses], appropriate to Java method with name [functionName].
      * @return appropriate function, or null if it has not found.
      */
-    private fun KotlinElement.getAppropriateFunctionByName(element: Element): KotlinFunction? {
-        val function = if (this is KotlinDeclarationContainer)
-            functions.find {
-                //                File("c.txt").appendText("${it.name} | ${it.typeRepresentation} ${element.asType()}\n")
-                it.name == element.simpleName.toString() && it.typeRepresentation == element.asType().toString().replace("? extends ", "")
-            }
-        else null
-
-        return function
-    }
+    private fun KotlinElement.getAppropriateFunctionByName(element: Element): KotlinFunction =
+        (this as? KotlinDeclarationContainer)
+                ?.functions?.find {
+            it.name == element.simpleName.toString() && it.typeRepresentation == element.asType().toString().replace("? extends ", "")
+        } ?: throw KotlinFunctionNotFoundException("Function not found: ${element.canonicalName}")
 
     /**
      * Finds constructor among elements inside [handledKotlinClasses], appropriate to Java constructor [element].
      * @return appropriate constructor, or null if it has not found.
      */
-    private fun KotlinElement.getAppropriateConstructor(element: Element): KotlinConstructor? {
-        return if (this is KotlinClass) {
-            constructors.find {
-                it.typeRepresentation == element.asType().toString().replace("? extends ", "")
-            }
-        }
-        else null
-    }
+    private fun KotlinElement.getAppropriateConstructor(element: Element): KotlinConstructor =
+        (this as? KotlinClass)
+                ?.constructors?.find {
+            it.typeRepresentation == element.asType().toString().replace("? extends ", "")
+        } ?: throw KotlinConstructorNotFoundException("Constructor not found: ${element.canonicalName}")
 
     /**
      * Finds class among elements inside [handledKotlinClasses], appropriate to Java class/interface/enum [element].
@@ -248,15 +246,15 @@ abstract class KAbstractProcessor: AbstractProcessor() {
      *
      * @return appropriate class, or null if it has not found.
      */
-    private fun KotlinElement.getAppropriateClass(element: Element): KotlinClass? {
-        return handledKotlinClasses.findAppropriateClass(element) as? KotlinClass
+    private fun KotlinElement.getAppropriateClass(element: Element): KotlinClass {
+        return handledKotlinClasses.findAppropriateClass(element) as KotlinClass
     }
 
     /**
      * Finds value parameter among elements inside [handledKotlinClasses], appropriate to Java variable [element].
      * @return appropriate constructor, or null if it has not found.
      */
-    private fun KotlinElement.getAppropriateValueParameter(element: Element): KotlinValueParameter? {
+    private fun KotlinElement.getAppropriateValueParameter(element: Element): KotlinValueParameter {
         element as VariableElement
         val parameter = if (this is KotlinConstructor) {
             valueParameters.find { it.name == element.simpleName.toString() }
@@ -264,14 +262,14 @@ abstract class KAbstractProcessor: AbstractProcessor() {
             valueParameters.find { it.name == element.simpleName.toString() }
         } else null
 
-        return parameter
+        return parameter ?: throw KotlinValueParameterNotFoundException("Value parameter not found: ${element.canonicalName}")
     }
 
     /**
      * Finds type parameter among elements inside [handledKotlinClasses], appropriate to Java type parameter [element].
      * @return appropriate constructor, or null if it has not found.
      */
-    private fun KotlinElement.getAppropriateTypeParameter(element: Element): KotlinTypeParameter? {
+    private fun KotlinElement.getAppropriateTypeParameter(element: Element): KotlinTypeParameter {
         element as TypeParameterElement
         val parameter = if (this is KotlinClass) {
             typeParameters.find { it.name == element.simpleName.toString() }
@@ -283,7 +281,7 @@ abstract class KAbstractProcessor: AbstractProcessor() {
             typeParameters.find { it.name == element.simpleName.toString() }
         } else null
 
-        return parameter
+        return parameter ?: throw KotlinTypeParameterNotFoundException("Type parameter not found: ${element.canonicalName}")
     }
 
     companion object {

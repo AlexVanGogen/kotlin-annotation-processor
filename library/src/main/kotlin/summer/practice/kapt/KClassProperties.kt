@@ -6,7 +6,6 @@ import java.io.File
 
 internal typealias AnnotationClass = Class<out Annotation>
 
-internal val file = File("phphp.txt")
 internal fun File.addLine(s: String) {
     appendText(s + "\n")
 }
@@ -57,9 +56,9 @@ enum class ElementVisibility {
     PUBLIC
 }
 
-sealed class KotlinElement {
-    var flags: Flags? = null
-        internal set
+sealed class KotlinElement(
+        private val flags: Flags? = null
+) {
 
     var enclosingElement: KotlinElement? = null
         internal set
@@ -96,29 +95,27 @@ sealed class KotlinElement {
     fun isAbstract(): Boolean = Flag.IS_ABSTRACT(flags ?: 0)
 }
 
-open class KotlinDeclarationContainer: KotlinElement() {
-    val functions: MutableList<KotlinFunction> = mutableListOf()
-    val properties: MutableList<KotlinProperty> = mutableListOf()
-    val typeAliases: MutableList<KotlinTypeAlias> = mutableListOf()
+open class KotlinDeclarationContainer internal constructor(private val flags: Flags? = null): KotlinElement(flags) {
+    open val functions: List<KotlinFunction> = listOf()
+    open val properties: List<KotlinProperty> = listOf()
+    open val typeAliases: List<KotlinTypeAlias> = listOf()
 }
 
-class KotlinClass: KotlinDeclarationContainer() {
-    var name: ClassName? = null
-        internal set
+class KotlinClass internal constructor(
+        val name: ClassName? = null,
+        override val functions: List<KotlinFunction> = listOf(),
+        override val properties: List<KotlinProperty> = listOf(),
+        override val typeAliases: List<KotlinTypeAlias> = listOf(),
+        val supertype: KotlinType? = null,
+        val typeParameters: List<KotlinTypeParameter> = listOf(),
+        val companionObjectName: String? = null,
+        val nestedClassesNames: List<String> = listOf(),
+        val enumEntriesNames: List<String> = listOf(),
+        val sealedClassesNames: List<ClassName> = listOf(),
+        val constructors: List<KotlinConstructor> = listOf(),
+        private val flags: Flags? = null
 
-    var supertype: KotlinType? = null
-        internal set
-
-    var typeParameters: MutableList<KotlinTypeParameter> = mutableListOf()
-        internal set
-
-    var companionObjectName: String? = null
-        internal set
-
-    val nestedClassesNames: MutableList<String> = mutableListOf()
-    val enumEntriesNames: MutableList<String> = mutableListOf()
-    val sealedClassesNames: MutableList<ClassName> = mutableListOf()
-    val constructors: MutableList<KotlinConstructor> = mutableListOf()
+): KotlinDeclarationContainer(flags) {
 
     fun isCommonClass(): Boolean = Flag.Class.IS_CLASS(flags ?: 0)
     fun isInterface(): Boolean = Flag.Class.IS_INTERFACE(flags ?: 0)
@@ -135,17 +132,26 @@ class KotlinClass: KotlinDeclarationContainer() {
     fun isInline(): Boolean = Flag.Class.IS_INLINE(flags ?: 0)
 }
 
-class KotlinPackage: KotlinDeclarationContainer() {
-    internal var name: String? = null
-}
 
-class KotlinLambda: KotlinElement() {
-    var wrappedFunction: KotlinFunction? = null
-        internal set
-}
+class KotlinPackage internal constructor(
+        internal var name: String? = null,
+        override val functions: List<KotlinFunction> = listOf(),
+        override val properties: List<KotlinProperty> = listOf(),
+        override val typeAliases: List<KotlinTypeAlias> = listOf(),
+        private val flags: Flags? = null
+): KotlinDeclarationContainer(flags)
 
-class KotlinConstructor: KotlinElement() {
-    val valueParameters: MutableList<KotlinValueParameter> = mutableListOf()
+
+class KotlinLambda internal constructor(
+        var wrappedFunction: KotlinFunction? = null,
+        private val flags: Flags? = null
+): KotlinElement(flags)
+
+
+class KotlinConstructor internal constructor(
+        val valueParameters: List<KotlinValueParameter> = listOf(),
+        private val flags: Flags? = null
+): KotlinElement(flags) {
 
     val typeRepresentation: String get() {
         val valueParameters = valueParameters.map { it.type?.javaName }.joinToString(",")
@@ -153,29 +159,25 @@ class KotlinConstructor: KotlinElement() {
         return "($valueParameters)$returnValue".replace('/', '.').replace('*', '?')
     }
 
-    val deliveredProperties: MutableSet<KotlinProperty> get() =
+    val deliveredProperties: Set<KotlinProperty> get() =
         if (isPrimary())
             (enclosingElement as? KotlinClass)?.properties?.filter {
                 it.name in valueParameters.map { value -> value.name }
-            }?.toMutableSet() ?: mutableSetOf()
-        else mutableSetOf()
+            }?.toSet() ?: setOf()
+        else setOf()
 
     fun isPrimary(): Boolean = Flag.Constructor.IS_PRIMARY(flags ?: 0)
 }
 
-class KotlinFunction: KotlinElement() {
-    var name: String? = null
-        internal set
 
-    val typeParameters: MutableList<KotlinTypeParameter> = mutableListOf()
-
-    var receiverParameterType: KotlinType? = null
-        internal set
-
-    val valueParameters: MutableList<KotlinValueParameter> = mutableListOf()
-
-    var returnType: KotlinType? = null
-        internal set
+class KotlinFunction internal constructor(
+        val name: String? = null,
+        val typeParameters: List<KotlinTypeParameter> = listOf(),
+        val receiverParameterType: KotlinType? = null,
+        val valueParameters: List<KotlinValueParameter> = listOf(),
+        val returnType: KotlinType? = null,
+        private val flags: Flags? = null
+): KotlinElement(flags) {
 
     val typeRepresentation: String get() {
         val typeParameters = if (typeParameters.isNotEmpty()) "<${typeParameters.map { it.name }.joinToString(",")}>" else ""
@@ -199,26 +201,17 @@ class KotlinFunction: KotlinElement() {
     fun isExtension(): Boolean = receiverParameterType != null
 }
 
-class KotlinProperty: KotlinElement() {
-    var name: String? = null
-        internal set
 
-    var getterFlags: Flags? = null
-        internal set
-
-    var setterFlags: Flags? = null
-        internal set
-
-    val typeParameters: MutableList<KotlinTypeParameter> = mutableListOf()
-
-    var receiverParameterType: KotlinType? = null
-        internal set
-
-    var setterParameter: KotlinValueParameter? = null
-        internal set
-
-    var returnType: KotlinType? = null
-        internal set
+class KotlinProperty internal constructor(
+        val name: String? = null,
+        val typeParameters: List<KotlinTypeParameter> = listOf(),
+        val receiverParameterType: KotlinType? = null,
+        val setterParameter: KotlinValueParameter? = null,
+        val returnType: KotlinType? = null,
+        private val flags: Flags? = null,
+        private val getterFlags: Flags? = null,
+        private val setterFlags: Flags? = null
+): KotlinElement(flags) {
 
     fun isExplicitlyDeclared(): Boolean = Flag.Property.IS_DECLARATION(flags ?: 0)
     fun isDelegation(): Boolean = Flag.Property.IS_DELEGATION(flags ?: 0)
@@ -248,33 +241,28 @@ class KotlinProperty: KotlinElement() {
     TODO: make explicit classes for getter and setter to determine whether annotation was added directly to getter/setter.
     Example of usage: mark get() as @AddExplicitGetterMethod to add new extension function
  */
-class KotlinPropertyGetter(val property: KotlinProperty)
-class KotlinPropertySetter(val property: KotlinProperty)
+class KotlinPropertyGetter internal constructor(val property: KotlinProperty)
+class KotlinPropertySetter internal constructor(val property: KotlinProperty)
 
-class KotlinTypeAlias: KotlinElement() {
-    var name: String? = null
-        internal set
 
-    val typeParameters: MutableList<KotlinTypeParameter> = mutableListOf()
-
-    var underlyingType: KotlinType? = null
-        internal set
-
-    var expandedType: KotlinType? = null
-        internal set
+class KotlinTypeAlias internal constructor(
+        val name: String? = null,
+        val typeParameters: List<KotlinTypeParameter> = listOf(),
+        val underlyingType: KotlinType? = null,
+        val expandedType: KotlinType? = null,
+        private val flags: Flags? = null
+): KotlinElement(flags) {
 
     val kAnnotations: MutableList<KmAnnotation> = mutableListOf()
 }
 
-class KotlinValueParameter: KotlinElement() {
-    var name: String? = null
-        internal set
 
-    var type: KotlinType? = null
-        internal set
-
-    var varargType: KotlinType? = null
-        internal set
+class KotlinValueParameter internal constructor(
+        val name: String? = null,
+        val type: KotlinType? = null,
+        val varargType: KotlinType? = null,
+        private val flags: Flags? = null
+): KotlinElement(flags) {
 
     fun declaresDefaultValue(): Boolean = Flag.ValueParameter.DECLARES_DEFAULT_VALUE(flags ?: 0)
     fun isCrossInline(): Boolean = Flag.ValueParameter.IS_CROSSINLINE(flags ?: 0)
@@ -288,7 +276,7 @@ class KotlinValueParameter: KotlinElement() {
         else if (isNoInline())
             result += "noinline "
         if (varargType != null) {
-            result += "vararg $name: ${varargType.toString()}"
+            result += "vararg $name: $varargType"
         } else {
             result += "$name: ${type.toString()}"
         }
@@ -296,32 +284,22 @@ class KotlinValueParameter: KotlinElement() {
     }
 }
 
-class KotlinType: KotlinElement() {
-    var name: String? = null
-        internal set
 
-    var abbreviatedType: KotlinType? = null
-        internal set
+class KotlinType internal constructor(
+        private val _name: String? = null,
+        val kind: KotlinTypeKind? = null,
+        val arguments: List<KotlinType> = listOf(),
+        val typeParameterId: Int? = null,
+        val variance: KmVariance? = null,
+        val abbreviatedType: KotlinType? = null,
+        val flexibleTypeUpperBound: KotlinType? = null,
+        val typeFlexibilityId: String? = null,
+        val outerClassType: KotlinType? = null,
+        private val flags: Flags? = null
+): KotlinElement(flags) {
 
-    var flexibleTypeUpperBound: KotlinType? = null
-        internal set
-
-    var kind: KotlinTypeKind? = null
-        internal set
-
-    var typeFlexibilityId: String? = null
-        internal set
-
-    val arguments: MutableList<KotlinType> = mutableListOf()
-
-    var outerClassType: KotlinType? = null
-        internal set
-
-    var typeParameterId: Int? = null
-        internal set
-
-    var variance: KmVariance? = null
-        internal set
+    private var typeParameterName: String? = null
+    val name: String? get() = if (kind == KotlinTypeKind.TYPE_PARAMETER) typeParameterName else _name
 
     val javaName: String? get() {
         return when (name) {
@@ -357,57 +335,37 @@ class KotlinType: KotlinElement() {
         return result
     }
 
-    val wrappedTypeParameter: KotlinTypeParameter?
-        get() {
-            val nestedElementsStack = mutableListOf<KotlinElement>()
-            var nextElement = enclosingElement
-            while (nextElement != null) {
-                when (nextElement) {
-                    is KotlinClass -> nestedElementsStack.add(nextElement)
-                    is KotlinTypeAlias -> nestedElementsStack.add(nextElement)
-                    is KotlinFunction -> nestedElementsStack.add(nextElement)
-                    is KotlinProperty -> nestedElementsStack.add(nextElement)
-                }
-                nextElement = nextElement.enclosingElement
-            }
-            var id = typeParameterId!!
-            for (lowerElement in nestedElementsStack.asReversed()) {
-                when (lowerElement) {
-                    is KotlinClass -> if (lowerElement.typeParameters.size <= id) id -= lowerElement.typeParameters.size else return lowerElement.typeParameters[id]
-                    is KotlinTypeAlias -> if (lowerElement.typeParameters.size <= id) id -= lowerElement.typeParameters.size else return lowerElement.typeParameters[id]
-                    is KotlinFunction -> if (lowerElement.typeParameters.size <= id) id -= lowerElement.typeParameters.size else return lowerElement.typeParameters[id]
-                    is KotlinProperty -> if (lowerElement.typeParameters.size <= id) id -= lowerElement.typeParameters.size else return lowerElement.typeParameters[id]
-                }
-            }
-            return null
-        }
+    var wrappedTypeParameter_: KotlinTypeParameter? = null
 
     val kotlinName: String? get() = "$name${if (arguments.isNotEmpty()) "<${arguments.joinToString { it.toString() }}>" else ""}${if (isNullable()) "?" else ""}"
 
     fun isNullable(): Boolean = Flag.Type.IS_NULLABLE(flags ?: 0)
     fun isSuspend(): Boolean = Flag.Type.IS_SUSPEND(flags ?: 0)
 
-    companion object {
-        val STAR_PROJECTION = KotlinType()
-        init {
-            STAR_PROJECTION.name = "*"
+    fun bindNestedTypeParametersWithWrappingType(parametersStack: List<KotlinTypeParameter> = listOf()) {
+        if (kind == KotlinTypeKind.TYPE_PARAMETER) {
+            wrappedTypeParameter_ = parametersStack.find { it.id == typeParameterId }
+            typeParameterName = wrappedTypeParameter_?.name
         }
+        outerClassType?.bindNestedTypeParametersWithWrappingType(parametersStack)
+        flexibleTypeUpperBound?.bindNestedTypeParametersWithWrappingType(parametersStack)
+        abbreviatedType?.bindNestedTypeParametersWithWrappingType(parametersStack)
+        arguments.forEach { it.bindNestedTypeParametersWithWrappingType(parametersStack) }
+    }
+
+    companion object {
+        val STAR_PROJECTION = KotlinType(_name = "*")
     }
 }
 
-class KotlinTypeParameter: KotlinElement() {
 
-    var name: String? = null
-        internal set
-
-    var id: Int? = null
-        internal set
-
-    var variance: KmVariance? = null
-        internal set
-
-    var upperBound: KotlinType? = null
-        internal set
+class KotlinTypeParameter internal constructor(
+        val name: String? = null,
+        val id: Int? = null,
+        val variance: KmVariance? = null,
+        val upperBound: KotlinType? = null,
+        private val flags: Flags? = null
+): KotlinElement(flags) {
 
     fun isReified(): Boolean = Flag.TypeParameter.IS_REIFIED(flags ?: 0)
 
@@ -422,12 +380,13 @@ class KotlinTypeParameter: KotlinElement() {
             result += "out "
         result += name
         if (upperBound != null)
-            result += ": ${upperBound?.toString()}"
+            result += ": $upperBound"
         return result
     }
 }
 
-fun KotlinClassMetadata.collectKotlinSpecificInformationFromClass(): KotlinDeclarationContainer {
+
+fun KotlinClassMetadata?.collectKotlinSpecificInformationFromClass(): KotlinDeclarationContainer {
 
     return when (this) {
         is KotlinClassMetadata.Class -> {
@@ -444,64 +403,86 @@ fun KotlinClassMetadata.collectKotlinSpecificInformationFromClass(): KotlinDecla
     }
 }
 
-class KotlinTypeVisitor: KmTypeVisitor() {
 
-    val kotlinType = KotlinType()
+private class KotlinTypeVisitor(var kotlinType: KotlinType = KotlinType()): KmTypeVisitor() {
 
-    override fun visitAbbreviatedType(flags: Flags): KmTypeVisitor? {
-        val kType = KotlinTypeVisitor()
-        kType.kotlinType.flags = flags
-        kType.kotlinType.enclosingElement = kotlinType
-        kotlinType.abbreviatedType = kType.kotlinType
-        return kType
-    }
+    var flags: Flags? = null
+    var variance: KmVariance? = null
+    var kind: KotlinTypeKind? = null
+    var name: String? = null
+    var typeFlexibilityId: String? = null
+    var typeParameterId: Int? = null
 
-    override fun visitArgument(flags: Flags, variance: KmVariance): KmTypeVisitor? {
-        val kType = KotlinTypeVisitor()
-        kType.kotlinType.flags = flags
-        kType.kotlinType.variance = variance
-        kType.kotlinType.enclosingElement = kotlinType
-        kotlinType.arguments.add(kType.kotlinType)
-        return kType
-    }
+    var abbreviatedTypeVisitor: KotlinTypeVisitor? = null
+    val argumentsVisitors = mutableListOf<KotlinTypeVisitor>()
+    var flexibleTypeUpperBoundVisitor: KotlinTypeVisitor? = null
+    var outerClassTypeVisitor: KotlinTypeVisitor? = null
+
+    override fun visitAbbreviatedType(flags: Flags): KmTypeVisitor? =
+            KotlinTypeVisitor().run {
+                this.flags = flags
+                abbreviatedTypeVisitor = this
+                this
+            }
+
+    override fun visitArgument(flags: Flags, variance: KmVariance): KmTypeVisitor? =
+            KotlinTypeVisitor().run {
+                this.flags = flags
+                this.variance = variance
+                this@KotlinTypeVisitor.argumentsVisitors.add(this)
+                this
+            }
 
     override fun visitClass(name: ClassName) {
-        kotlinType.kind = KotlinTypeKind.CLASS_TYPE
-        kotlinType.name = name
+        kind = KotlinTypeKind.CLASS_TYPE
+        this.name = name
     }
 
-    override fun visitFlexibleTypeUpperBound(flags: Flags, typeFlexibilityId: String?): KmTypeVisitor? {
-        val kType = KotlinTypeVisitor()
-        kType.kotlinType.run {
-            this.flags = flags
-            this.typeFlexibilityId = typeFlexibilityId
-            this.enclosingElement = kotlinType
-        }
-        kotlinType.flexibleTypeUpperBound = kType.kotlinType
-        return kType
-    }
+    override fun visitFlexibleTypeUpperBound(flags: Flags, typeFlexibilityId: String?): KmTypeVisitor? =
+            KotlinTypeVisitor().run {
+                this.flags = flags
+                this.typeFlexibilityId = typeFlexibilityId
+                flexibleTypeUpperBoundVisitor = this
+                this
+            }
 
-    override fun visitOuterType(flags: Flags): KmTypeVisitor? {
-        val kType = KotlinTypeVisitor()
-        kType.kotlinType.flags = flags
-        kType.kotlinType.enclosingElement = kotlinType
-        kotlinType.outerClassType = kType.kotlinType
-        return kType
-    }
+
+    override fun visitOuterType(flags: Flags): KmTypeVisitor? =
+            KotlinTypeVisitor().run {
+                this.flags = flags
+                outerClassTypeVisitor = this
+                this
+            }
 
     override fun visitTypeAlias(name: ClassName) {
-        kotlinType.kind = KotlinTypeKind.CLASS_TYPE
-        kotlinType.name = name
+        kind = KotlinTypeKind.TYPE_ALIAS
+        this.name = name
     }
 
     override fun visitTypeParameter(id: Int) {
-        kotlinType.kind = KotlinTypeKind.TYPE_PARAMETER
-        kotlinType.typeParameterId = id
-        kotlinType.name = kotlinType.wrappedTypeParameter?.name
+        kind = KotlinTypeKind.TYPE_PARAMETER
+        typeParameterId = id
     }
 
     override fun visitEnd() {
-        super.visitEnd()
+        kotlinType = KotlinType(
+                name,
+                kind,
+                argumentsVisitors.map { it.kotlinType }.toList(),
+                typeParameterId,
+                variance,
+                abbreviatedTypeVisitor?.kotlinType,
+                flexibleTypeUpperBoundVisitor?.kotlinType,
+                typeFlexibilityId,
+                outerClassTypeVisitor?.kotlinType,
+                flags
+        )
+        kotlinType.run {
+            arguments.forEach { it.enclosingElement = kotlinType }
+            abbreviatedType?.enclosingElement = kotlinType
+            flexibleTypeUpperBound?.enclosingElement = kotlinType
+            outerClassType?.enclosingElement = kotlinType
+        }
     }
 
     override fun visitExtensions(type: KmExtensionType): KmTypeExtensionVisitor? {
@@ -509,415 +490,603 @@ class KotlinTypeVisitor: KmTypeVisitor() {
     }
 
     override fun visitStarProjection() {
-        kotlinType.arguments.add(KotlinType.STAR_PROJECTION)
+        argumentsVisitors.add(KotlinTypeVisitor(KotlinType.STAR_PROJECTION))
     }
 }
 
-class KotlinTypeParameterVisitor: KmTypeParameterVisitor() {
 
-    val kotlinTypeParameter = KotlinTypeParameter()
+private class KotlinTypeParameterVisitor: KmTypeParameterVisitor() {
+
+    var kotlinTypeParameter = KotlinTypeParameter()
+
+    var flags: Flags? = null
+    var variance: KmVariance? = null
+    var name: String? = null
+    var id: Int? = null
+
+    var upperBoundVisitor: KotlinTypeVisitor? = null
 
     override fun visitEnd() {
-        super.visitEnd()
+        kotlinTypeParameter = KotlinTypeParameter(
+                name,
+                id,
+                variance,
+                upperBoundVisitor?.kotlinType,
+                flags
+        )
+        kotlinTypeParameter.upperBound?.enclosingElement = kotlinTypeParameter
     }
 
     override fun visitExtensions(type: KmExtensionType): KmTypeParameterExtensionVisitor? {
         return super.visitExtensions(type)
     }
 
-    override fun visitUpperBound(flags: Flags): KmTypeVisitor? {
-        val kType = KotlinTypeVisitor()
-        kType.kotlinType.flags = flags
-        kType.kotlinType.enclosingElement = kotlinTypeParameter
-        kotlinTypeParameter.upperBound = kType.kotlinType
-        return kType
-    }
+    override fun visitUpperBound(flags: Flags): KmTypeVisitor? =
+            KotlinTypeVisitor().run {
+                this.flags = flags
+                upperBoundVisitor = this
+                this
+            }
 }
 
-class KotlinValueParameterVisitor: KmValueParameterVisitor() {
 
-    val kotlinValueParameter = KotlinValueParameter()
+private class KotlinValueParameterVisitor: KmValueParameterVisitor() {
+
+    var kotlinValueParameter = KotlinValueParameter()
+
+    var name: String? = null
+    var flags: Flags? = null
+
+    var typeVisitor: KotlinTypeVisitor? = null
+    var varargTypeVisitor: KotlinTypeVisitor? = null
 
     override fun visitEnd() {
-        super.visitEnd()
+        kotlinValueParameter = KotlinValueParameter(
+                name,
+                typeVisitor?.kotlinType,
+                varargTypeVisitor?.kotlinType,
+                flags
+        )
+        kotlinValueParameter.run {
+            type?.enclosingElement = kotlinValueParameter
+            varargType?.enclosingElement = kotlinValueParameter
+        }
     }
 
-    override fun visitType(flags: Flags): KmTypeVisitor? {
-        val kType = KotlinTypeVisitor()
-        kType.kotlinType.flags = flags
-        kType.kotlinType.enclosingElement = kotlinValueParameter
-        kotlinValueParameter.type = kType.kotlinType
-        return kType
-    }
 
-    override fun visitVarargElementType(flags: Flags): KmTypeVisitor? {
-        val kType = KotlinTypeVisitor()
-        kType.kotlinType.flags = flags
-        kType.kotlinType.enclosingElement = kotlinValueParameter
-        kotlinValueParameter.varargType = kType.kotlinType
-        return kType
-    }
+    override fun visitType(flags: Flags): KmTypeVisitor? =
+            KotlinTypeVisitor().run {
+                this.flags = flags
+                typeVisitor = this
+                this
+            }
+
+
+    override fun visitVarargElementType(flags: Flags): KmTypeVisitor? =
+            KotlinTypeVisitor().run {
+                this.flags = flags
+                varargTypeVisitor = this
+                this
+            }
 }
 
-class KotlinTypeAliasVisitor: KmTypeAliasVisitor() {
 
-    val kotlinTypeAlias = KotlinTypeAlias()
+private class KotlinTypeAliasVisitor: KmTypeAliasVisitor() {
+
+    var kotlinTypeAlias = KotlinTypeAlias()
+
+    var name: String? = null
+    var flags: Flags? = null
+
+    val typeParametersVisitors = mutableListOf<KotlinTypeParameterVisitor>()
+    var underlyingTypeVisitor: KotlinTypeVisitor? = null
+    var expandedTypeVisitor: KotlinTypeVisitor? = null
+
+    val annotations = mutableListOf<KmAnnotation>()
 
     override fun visitAnnotation(annotation: KmAnnotation) {
-        kotlinTypeAlias.kAnnotations.add(annotation)
+        annotations.add(annotation)
     }
 
     override fun visitEnd() {
-        super.visitEnd()
-    }
-
-    override fun visitExpandedType(flags: Flags): KmTypeVisitor? {
-        val kType = KotlinTypeVisitor()
-        kType.kotlinType.flags = flags
-        kType.kotlinType.enclosingElement = kotlinTypeAlias
-        kotlinTypeAlias.expandedType = kType.kotlinType
-        return kType
-    }
-
-    override fun visitTypeParameter(flags: Flags, name: String, id: Int, variance: KmVariance): KmTypeParameterVisitor? {
-        val kpType = KotlinTypeParameterVisitor()
-        kpType.kotlinTypeParameter.run {
-            this.flags = flags
-            this.name = name
-            this.id = id
-            this.variance = variance
-            this.enclosingElement = kotlinTypeAlias
+        kotlinTypeAlias = KotlinTypeAlias(
+                name,
+                typeParametersVisitors.map { it.kotlinTypeParameter },
+                underlyingTypeVisitor?.kotlinType,
+                expandedTypeVisitor?.kotlinType,
+                flags
+        )
+        kotlinTypeAlias.run {
+            kAnnotations.addAll(annotations)
+            typeParameters.forEach { it.enclosingElement = kotlinTypeAlias }
+            underlyingType?.enclosingElement = kotlinTypeAlias
+            expandedType?.enclosingElement = kotlinTypeAlias
         }
-        kotlinTypeAlias.typeParameters.add(kpType.kotlinTypeParameter)
-        return kpType
     }
 
-    override fun visitUnderlyingType(flags: Flags): KmTypeVisitor? {
-        val kType = KotlinTypeVisitor()
-        kType.kotlinType.flags = flags
-        kType.kotlinType.enclosingElement = kotlinTypeAlias
-        kotlinTypeAlias.underlyingType = kType.kotlinType
-        return kType
-    }
+
+    override fun visitExpandedType(flags: Flags): KmTypeVisitor? =
+            KotlinTypeVisitor().run {
+                this.flags = flags
+                expandedTypeVisitor = this
+                this
+            }
+
+
+    override fun visitTypeParameter(flags: Flags, name: String, id: Int, variance: KmVariance): KmTypeParameterVisitor? =
+            KotlinTypeParameterVisitor().run {
+                this.flags = flags
+                this.name = name
+                this.id = id
+                this.variance = variance
+                typeParametersVisitors.add(this)
+                this
+            }
+
+
+    override fun visitUnderlyingType(flags: Flags): KmTypeVisitor? =
+            KotlinTypeVisitor().run {
+                this.flags = flags
+                underlyingTypeVisitor = this
+                this
+            }
 
     override fun visitVersionRequirement(): KmVersionRequirementVisitor? {
         return super.visitVersionRequirement()
     }
 }
 
-class KotlinPropertyVisitor: KmPropertyVisitor() {
 
-    val kotlinProperty = KotlinProperty()
+private class KotlinPropertyVisitor: KmPropertyVisitor() {
+
+    var kotlinProperty = KotlinProperty()
+
+    var name: String? = null
+    var flags: Flags? = null
+    var getterFlags: Flags? = null
+    var setterFlags: Flags? = null
+
+    val typeParametersVisitors = mutableListOf<KotlinTypeParameterVisitor>()
+    var receiverParameterTypeVisitor: KotlinTypeVisitor? = null
+    var setterParameterVisitor: KotlinValueParameterVisitor? = null
+    var returnTypeVisitor: KotlinTypeVisitor? = null
 
     override fun visitEnd() {
-        super.visitEnd()
+        kotlinProperty = KotlinProperty(
+                name,
+                typeParametersVisitors.map { it.kotlinTypeParameter },
+                receiverParameterTypeVisitor?.kotlinType,
+                setterParameterVisitor?.kotlinValueParameter,
+                returnTypeVisitor?.kotlinType,
+                flags,
+                getterFlags,
+                setterFlags
+        )
+        kotlinProperty.run {
+            typeParameters.forEach { it.enclosingElement = kotlinProperty}
+            receiverParameterType?.enclosingElement = kotlinProperty
+            setterParameter?.enclosingElement = kotlinProperty
+            returnType?.enclosingElement = kotlinProperty
+        }
     }
 
     override fun visitExtensions(type: KmExtensionType): KmPropertyExtensionVisitor? {
         return super.visitExtensions(type)
     }
 
-    override fun visitReceiverParameterType(flags: Flags): KmTypeVisitor? {
-        val kType = KotlinTypeVisitor()
-        kType.kotlinType.flags = flags
-        kType.kotlinType.enclosingElement = kotlinProperty
-        kotlinProperty.receiverParameterType = kType.kotlinType
-        return kType
-    }
 
-    override fun visitReturnType(flags: Flags): KmTypeVisitor? {
-        val kType = KotlinTypeVisitor()
-        kType.kotlinType.flags = flags
-        kType.kotlinType.enclosingElement = kotlinProperty
-        kotlinProperty.returnType = kType.kotlinType
-        return kType
-    }
+    override fun visitReceiverParameterType(flags: Flags): KmTypeVisitor? =
+            KotlinTypeVisitor().run {
+                this.flags = flags
+                receiverParameterTypeVisitor = this
+                this
+            }
 
-    override fun visitSetterParameter(flags: Flags, name: String): KmValueParameterVisitor? {
-        val vpType = KotlinValueParameterVisitor()
-        vpType.kotlinValueParameter.run {
-            this.name = name
-            this.flags = flags
-            this.enclosingElement = kotlinProperty
-        }
-        kotlinProperty.setterParameter = vpType.kotlinValueParameter
-        return vpType
-    }
+    override fun visitReturnType(flags: Flags): KmTypeVisitor? =
+            KotlinTypeVisitor().run {
+                this.flags = flags
+                returnTypeVisitor = this
+                this
+            }
 
-    override fun visitTypeParameter(flags: Flags, name: String, id: Int, variance: KmVariance): KmTypeParameterVisitor? {
-        val kpType = KotlinTypeParameterVisitor()
-        kpType.kotlinTypeParameter.run {
-            this.flags = flags
-            this.name = name
-            this.id = id
-            this.variance = variance
-            this.enclosingElement = kotlinProperty
-        }
-        kotlinProperty.typeParameters.add(kpType.kotlinTypeParameter)
-        return kpType
-    }
+    override fun visitSetterParameter(flags: Flags, name: String): KmValueParameterVisitor? =
+            KotlinValueParameterVisitor().run {
+                this.flags = flags
+                this.name = name
+                setterParameterVisitor = this
+                this
+            }
+
+    override fun visitTypeParameter(flags: Flags, name: String, id: Int, variance: KmVariance): KmTypeParameterVisitor? =
+            KotlinTypeParameterVisitor().run {
+                this.flags = flags
+                this.name = name
+                this.id = id
+                this.variance = variance
+                typeParametersVisitors.add(this)
+                this
+            }
 
     override fun visitVersionRequirement(): KmVersionRequirementVisitor? {
         return super.visitVersionRequirement()
     }
 }
 
-class KotlinFunctionVisitor: KmFunctionVisitor() {
 
-    val kotlinFunction = KotlinFunction()
+private class KotlinFunctionVisitor: KmFunctionVisitor() {
+
+    var kotlinFunction = KotlinFunction()
+
+    var name: String? = null
+    var flags: Flags? = null
+
+    val typeParametersVisitors = mutableListOf<KotlinTypeParameterVisitor>()
+    var receiverParameterTypeVisitor: KotlinTypeVisitor? = null
+    val valueParametersVisitors = mutableListOf<KotlinValueParameterVisitor>()
+    var returnTypeVisitor: KotlinTypeVisitor? = null
 
     override fun visitContract(): KmContractVisitor? {
         return super.visitContract()
     }
 
     override fun visitEnd() {
-        super.visitEnd()
+        kotlinFunction = KotlinFunction(
+                name,
+                typeParametersVisitors.map { it.kotlinTypeParameter },
+                receiverParameterTypeVisitor?.kotlinType,
+                valueParametersVisitors.map { it.kotlinValueParameter },
+                returnTypeVisitor?.kotlinType,
+                flags
+        )
+        kotlinFunction.run {
+            typeParameters.forEach { it.enclosingElement = kotlinFunction }
+            valueParameters.forEach { it.enclosingElement = kotlinFunction }
+            receiverParameterType?.enclosingElement = kotlinFunction
+            returnType?.enclosingElement = kotlinFunction
+        }
     }
 
     override fun visitExtensions(type: KmExtensionType): KmFunctionExtensionVisitor? {
         return super.visitExtensions(type)
     }
 
-    override fun visitReceiverParameterType(flags: Flags): KmTypeVisitor? {
-        val kType = KotlinTypeVisitor()
-        kType.kotlinType.flags = flags
-        kType.kotlinType.enclosingElement = kotlinFunction
-        kotlinFunction.receiverParameterType = kType.kotlinType
-        return kType
-    }
+    override fun visitReceiverParameterType(flags: Flags): KmTypeVisitor? =
+            KotlinTypeVisitor().run {
+                this.flags = flags
+                receiverParameterTypeVisitor = this
+                this
+            }
 
-    override fun visitReturnType(flags: Flags): KmTypeVisitor? {
-        val kType = KotlinTypeVisitor()
-        kType.kotlinType.flags = flags
-        kType.kotlinType.enclosingElement = kotlinFunction
-        kotlinFunction.returnType = kType.kotlinType
-        return kType
-    }
 
-    override fun visitTypeParameter(flags: Flags, name: String, id: Int, variance: KmVariance): KmTypeParameterVisitor? {
-        val kpType = KotlinTypeParameterVisitor()
-        kpType.kotlinTypeParameter.run {
-            this.flags = flags
-            this.name = name
-            this.id = id
-            this.variance = variance
-            this.enclosingElement = kotlinFunction
-        }
-        kotlinFunction.typeParameters.add(kpType.kotlinTypeParameter)
-        return kpType
-    }
+    override fun visitReturnType(flags: Flags): KmTypeVisitor? =
+            KotlinTypeVisitor().run {
+                this.flags = flags
+                returnTypeVisitor = this
+                this
+            }
 
-    override fun visitValueParameter(flags: Flags, name: String): KmValueParameterVisitor? {
-        val vpType = KotlinValueParameterVisitor()
-        vpType.kotlinValueParameter.run {
-            this.name = name
-            this.flags = flags
-            this.enclosingElement = kotlinFunction
-        }
-        kotlinFunction.valueParameters.add(vpType.kotlinValueParameter)
-        return vpType
-    }
+
+    override fun visitTypeParameter(flags: Flags, name: String, id: Int, variance: KmVariance): KmTypeParameterVisitor? =
+            KotlinTypeParameterVisitor().run {
+                this.flags = flags
+                this.name = name
+                this.id = id
+                this.variance = variance
+                typeParametersVisitors.add(this)
+                this
+            }
+
+
+    override fun visitValueParameter(flags: Flags, name: String): KmValueParameterVisitor? =
+            KotlinValueParameterVisitor().run {
+                this.flags = flags
+                this.name = name
+                valueParametersVisitors.add(this)
+                this
+            }
 
     override fun visitVersionRequirement(): KmVersionRequirementVisitor? {
         return super.visitVersionRequirement()
     }
 }
 
-class KotlinConstructorVisitor: KmConstructorVisitor() {
 
-    val kotlinConstructor = KotlinConstructor()
+private class KotlinConstructorVisitor: KmConstructorVisitor() {
+
+    var kotlinConstructor = KotlinConstructor()
+
+    var flags: Flags? = null
+
+    val valueParametersVisitors = mutableListOf<KotlinValueParameterVisitor>()
 
     override fun visitEnd() {
-        super.visitEnd()
+        kotlinConstructor = KotlinConstructor(
+                valueParametersVisitors.map { it.kotlinValueParameter },
+                flags
+        )
+        kotlinConstructor.run {
+            valueParameters.forEach { it.enclosingElement = kotlinConstructor }
+        }
     }
 
     override fun visitExtensions(type: KmExtensionType): KmConstructorExtensionVisitor? {
         return super.visitExtensions(type)
     }
 
-    override fun visitValueParameter(flags: Flags, name: String): KmValueParameterVisitor? {
-        val vpType = KotlinValueParameterVisitor()
-        vpType.kotlinValueParameter.run {
-            this.name = name
-            this.flags = flags
-            this.enclosingElement = kotlinConstructor
-        }
-        kotlinConstructor.valueParameters.add(vpType.kotlinValueParameter)
-        return vpType
-    }
+    override fun visitValueParameter(flags: Flags, name: String): KmValueParameterVisitor? =
+            KotlinValueParameterVisitor().run {
+                this.flags = flags
+                this.name = name
+                valueParametersVisitors.add(this)
+                this
+            }
 
     override fun visitVersionRequirement(): KmVersionRequirementVisitor? {
         return super.visitVersionRequirement()
     }
 }
 
-class KotlinLambdaVisitor: KmLambdaVisitor() {
 
-    val kotlinLambda = KotlinLambda()
+private class KotlinLambdaVisitor: KmLambdaVisitor() {
+
+    var kotlinLambda = KotlinLambda()
+
+    var flags: Flags? = null
+    var wrappedFunction: KotlinFunction? = null
+
+    var wrappedFunctionVisitor: KotlinFunctionVisitor? = null
 
     override fun visitEnd() {
-        super.visitEnd()
+        kotlinLambda = KotlinLambda(
+                wrappedFunctionVisitor?.kotlinFunction,
+                flags
+        )
+        kotlinLambda.enclosingElement = wrappedFunction
     }
 
-    override fun visitFunction(flags: Flags, name: String): KmFunctionVisitor? {
-        val kFunction = KotlinFunctionVisitor()
-        kFunction.kotlinFunction.run {
-            this.flags = flags
-            this.name = name
-            kotlinLambda.wrappedFunction = this
-        }
-        return kFunction
-    }
+    override fun visitFunction(flags: Flags, name: String): KmFunctionVisitor? =
+            KotlinFunctionVisitor().run {
+                this.flags = flags
+                this.name = name
+                wrappedFunctionVisitor = this
+                this
+            }
 }
 
-class KotlinClassVisitor: KmClassVisitor() {
 
-    val kotlinClass = KotlinClass()
+private class KotlinClassVisitor: KmClassVisitor() {
+
+    var kotlinClass = KotlinClass()
+
+    var name: ClassName? = null
+    var flags: Flags? = null
+    var companionObjectName: String? = null
+    val nestedClassesNames: MutableList<String> = mutableListOf()
+    val enumEntriesNames: MutableList<String> = mutableListOf()
+    val sealedClassesNames: MutableList<ClassName> = mutableListOf()
+
+    val functionsVisitors = mutableListOf<KotlinFunctionVisitor>()
+    val propertiesVisitors = mutableListOf<KotlinPropertyVisitor>()
+    val typeAliasesVisitors = mutableListOf<KotlinTypeAliasVisitor>()
+    var supertypeVisitor: KotlinTypeVisitor? = null
+    val typeParametersVisitors = mutableListOf<KotlinTypeParameterVisitor>()
+    val constructorsVisitors = mutableListOf<KotlinConstructorVisitor>()
 
     override fun visit(flags: Flags, name: ClassName) {
-        kotlinClass.flags = flags
-        kotlinClass.name = name.replace('/', '.')
+        this.flags = flags
+        this.name = name.replace('/', '.')
     }
 
     override fun visitCompanionObject(name: String) {
-        kotlinClass.companionObjectName = name
+        companionObjectName = name
     }
 
-    override fun visitConstructor(flags: Flags): KmConstructorVisitor? {
-        val kConstructor = KotlinConstructorVisitor()
-        kConstructor.kotlinConstructor.run {
+    override fun visitConstructor(flags: Flags): KmConstructorVisitor? =
+        KotlinConstructorVisitor().run {
             this.flags = flags
-            this.enclosingElement = kotlinClass
-            kotlinClass.constructors.add(this)
+            constructorsVisitors.add(this)
+            this
         }
-        return kConstructor
-    }
 
     override fun visitEnd() {
-        super.visitEnd()
+        kotlinClass = KotlinClass(
+                name,
+                functionsVisitors.map { it.kotlinFunction },
+                propertiesVisitors.map { it.kotlinProperty },
+                typeAliasesVisitors.map { it.kotlinTypeAlias },
+                supertypeVisitor?.kotlinType,
+                typeParametersVisitors.map { it.kotlinTypeParameter },
+                companionObjectName,
+                nestedClassesNames,
+                enumEntriesNames,
+                sealedClassesNames,
+                constructorsVisitors.map { it.kotlinConstructor },
+                flags
+        )
+        kotlinClass.run {
+            functions.forEach { it.enclosingElement = kotlinClass }
+            properties.forEach { it.enclosingElement = kotlinClass }
+            typeAliases.forEach { it.enclosingElement = kotlinClass }
+            typeParameters.forEach { it.enclosingElement = kotlinClass }
+            constructors.forEach { it.enclosingElement = kotlinClass }
+            supertype?.enclosingElement = kotlinClass
+        }
     }
 
     override fun visitEnumEntry(name: String) {
-        kotlinClass.enumEntriesNames.add(name)
+        enumEntriesNames.add(name)
     }
 
     override fun visitExtensions(type: KmExtensionType): KmClassExtensionVisitor? {
         return super.visitExtensions(type)
     }
 
-    override fun visitFunction(flags: Flags, name: String): KmFunctionVisitor? {
-        val kFunction = KotlinFunctionVisitor()
-        kFunction.kotlinFunction.run {
+    override fun visitFunction(flags: Flags, name: String): KmFunctionVisitor? =
+        KotlinFunctionVisitor().run {
             this.flags = flags
             this.name = name
-            this.enclosingElement = kotlinClass
-            kotlinClass.functions.add(this)
+            functionsVisitors.add(this)
+            this
         }
-        return kFunction
-    }
 
     override fun visitNestedClass(name: String) {
-        kotlinClass.nestedClassesNames.add(name)
+        nestedClassesNames.add(name)
     }
 
-    override fun visitProperty(flags: Flags, name: String, getterFlags: Flags, setterFlags: Flags): KmPropertyVisitor? {
-        val kProperty = KotlinPropertyVisitor()
-        kProperty.kotlinProperty.run {
-            this.flags = flags
-            this.name = name
-            this.getterFlags = getterFlags
-            this.setterFlags = setterFlags
-            this.enclosingElement = kotlinClass
-            kotlinClass.properties.add(this)
-        }
-        return kProperty
-    }
+    override fun visitProperty(flags: Flags, name: String, getterFlags: Flags, setterFlags: Flags): KmPropertyVisitor? =
+            KotlinPropertyVisitor().run {
+                this.flags = flags
+                this.name = name
+                this.getterFlags = getterFlags
+                this.setterFlags = setterFlags
+                propertiesVisitors.add(this)
+                this
+            }
 
     override fun visitSealedSubclass(name: ClassName) {
-        kotlinClass.sealedClassesNames.add(name)
+        sealedClassesNames.add(name)
     }
 
-    override fun visitSupertype(flags: Flags): KmTypeVisitor? {
-        val kType = KotlinTypeVisitor()
-        kType.kotlinType.flags = flags
-        kType.kotlinType.enclosingElement = kotlinClass
-        kotlinClass.supertype = kType.kotlinType
-        return kType
-    }
-
-    override fun visitTypeAlias(flags: Flags, name: String): KmTypeAliasVisitor? {
-        val kTypeAlias = KotlinTypeAliasVisitor()
-        kTypeAlias.kotlinTypeAlias.run {
+    override fun visitSupertype(flags: Flags): KmTypeVisitor? =
+        KotlinTypeVisitor().run {
             this.flags = flags
-            this.name = name
-            this.enclosingElement = kotlinClass
-            kotlinClass.typeAliases.add(this)
+            supertypeVisitor = this
+            this
         }
-        return kTypeAlias
-    }
 
-    override fun visitTypeParameter(flags: Flags, name: String, id: Int, variance: KmVariance): KmTypeParameterVisitor? {
-        val kpType = KotlinTypeParameterVisitor()
-        kpType.kotlinTypeParameter.run {
+    override fun visitTypeAlias(flags: Flags, name: String): KmTypeAliasVisitor? =
+            KotlinTypeAliasVisitor().run {
+                this.flags = flags
+                this.name = name
+                typeAliasesVisitors.add(this)
+                this
+            }
+
+    override fun visitTypeParameter(flags: Flags, name: String, id: Int, variance: KmVariance): KmTypeParameterVisitor? =
+        KotlinTypeParameterVisitor().run {
             this.flags = flags
             this.name = name
             this.id = id
             this.variance = variance
-            this.enclosingElement = kotlinClass
+            typeParametersVisitors.add(this)
+            this
         }
-        kotlinClass.typeParameters.add(kpType.kotlinTypeParameter)
-        return kpType
-    }
 
     override fun visitVersionRequirement(): KmVersionRequirementVisitor? {
         return super.visitVersionRequirement()
     }
 }
 
-class KotlinPackageVisitor: KmPackageVisitor() {
 
-    val kotlinPackage = KotlinPackage()
+private class KotlinPackageVisitor: KmPackageVisitor() {
+
+    var kotlinPackage = KotlinPackage()
+
+    var name: String? = null
+    var flags: Flags? = null
+
+    val functionsVisitors = mutableListOf<KotlinFunctionVisitor>()
+    val propertiesVisitors = mutableListOf<KotlinPropertyVisitor>()
+    val typeAliasesVisitors = mutableListOf<KotlinTypeAliasVisitor>()
 
     override fun visitEnd() {
-        super.visitEnd()
+        kotlinPackage = KotlinPackage(
+                name,
+                functionsVisitors.map { it.kotlinFunction },
+                propertiesVisitors.map { it.kotlinProperty },
+                typeAliasesVisitors.map { it.kotlinTypeAlias },
+                flags
+        )
+        kotlinPackage.run {
+            functions.forEach { it.enclosingElement = kotlinPackage }
+            properties.forEach { it.enclosingElement = kotlinPackage }
+            typeAliases.forEach { it.enclosingElement = kotlinPackage }
+        }
     }
 
     override fun visitExtensions(type: KmExtensionType): KmPackageExtensionVisitor? {
         return super.visitExtensions(type)
     }
 
-    override fun visitFunction(flags: Flags, name: String): KmFunctionVisitor? {
-        val kFunction = KotlinFunctionVisitor()
-        kFunction.kotlinFunction.run {
-            this.flags = flags
-            this.name = name
-            this.enclosingElement = kotlinPackage
-            kotlinPackage.functions.add(this)
-        }
-        return kFunction
-    }
+    override fun visitFunction(flags: Flags, name: String): KmFunctionVisitor? =
+            KotlinFunctionVisitor().run {
+                this.flags = flags
+                this.name = name
+                functionsVisitors.add(this)
+                this
+            }
 
-    override fun visitProperty(flags: Flags, name: String, getterFlags: Flags, setterFlags: Flags): KmPropertyVisitor? {
-        val kProperty = KotlinPropertyVisitor()
-        kProperty.kotlinProperty.run {
-            this.flags = flags
-            this.name = name
-            this.getterFlags = getterFlags
-            this.setterFlags = setterFlags
-            this.enclosingElement = kotlinPackage
-            kotlinPackage.properties.add(this)
-        }
-        return kProperty
-    }
+    override fun visitProperty(flags: Flags, name: String, getterFlags: Flags, setterFlags: Flags): KmPropertyVisitor? =
+            KotlinPropertyVisitor().run {
+                this.flags = flags
+                this.name = name
+                this.getterFlags = getterFlags
+                this.setterFlags = setterFlags
+                propertiesVisitors.add(this)
+                this
+            }
 
-    override fun visitTypeAlias(flags: Flags, name: String): KmTypeAliasVisitor? {
-        val kTypeAlias = KotlinTypeAliasVisitor()
-        kTypeAlias.kotlinTypeAlias.run {
-            this.flags = flags
-            this.name = name
-            this.enclosingElement = kotlinPackage
-            kotlinPackage.typeAliases.add(this)
-        }
-        return kTypeAlias
-    }
+    override fun visitTypeAlias(flags: Flags, name: String): KmTypeAliasVisitor? =
+            KotlinTypeAliasVisitor().run {
+                this.flags = flags
+                this.name = name
+                typeAliasesVisitors.add(this)
+                this
+            }
+}
+
+
+fun KotlinClass.bindNestedTypeParametersWithWrappingType(parametersStack: List<KotlinTypeParameter> = listOf()) {
+    val stack = parametersStack.plus(typeParameters)
+    typeParameters.forEach { it.bindNestedTypeParametersWithWrappingType(stack) }
+    functions.forEach { it.bindNestedTypeParametersWithWrappingType(stack) }
+    properties.forEach { it.bindNestedTypeParametersWithWrappingType(stack) }
+    typeAliases.forEach { it.bindNestedTypeParametersWithWrappingType(stack) }
+    constructors.forEach { it.bindNestedTypeParametersWithWrappingType(stack) }
+}
+
+fun KotlinPackage.bindNestedTypeParametersWithWrappingType(parametersStack: List<KotlinTypeParameter> = listOf()) {
+    functions.forEach { it.bindNestedTypeParametersWithWrappingType(parametersStack) }
+    properties.forEach { it.bindNestedTypeParametersWithWrappingType(parametersStack) }
+    typeAliases.forEach { it.bindNestedTypeParametersWithWrappingType(parametersStack) }
+}
+
+fun KotlinLambda.bindNestedTypeParametersWithWrappingType(parametersStack: List<KotlinTypeParameter> = listOf()) {
+    wrappedFunction?.bindNestedTypeParametersWithWrappingType(parametersStack)
+}
+
+fun KotlinConstructor.bindNestedTypeParametersWithWrappingType(parametersStack: List<KotlinTypeParameter> = listOf()) {
+    valueParameters.forEach { it.bindNestedTypeParametersWithWrappingType(parametersStack) }
+}
+
+fun KotlinFunction.bindNestedTypeParametersWithWrappingType(parametersStack: List<KotlinTypeParameter> = listOf()) {
+    val stack = parametersStack.plus(typeParameters)
+    typeParameters.forEach { it.bindNestedTypeParametersWithWrappingType(stack) }
+    receiverParameterType?.bindNestedTypeParametersWithWrappingType(stack)
+    returnType?.bindNestedTypeParametersWithWrappingType(stack)
+    valueParameters.forEach { it.bindNestedTypeParametersWithWrappingType(stack) }
+}
+
+fun KotlinProperty.bindNestedTypeParametersWithWrappingType(parametersStack: List<KotlinTypeParameter> = listOf()) {
+    val stack = parametersStack.plus(typeParameters)
+    typeParameters.forEach { it.bindNestedTypeParametersWithWrappingType(stack) }
+    receiverParameterType?.bindNestedTypeParametersWithWrappingType(stack)
+    returnType?.bindNestedTypeParametersWithWrappingType(stack)
+    setterParameter?.bindNestedTypeParametersWithWrappingType(stack)
+}
+
+fun KotlinTypeAlias.bindNestedTypeParametersWithWrappingType(parametersStack: List<KotlinTypeParameter> = listOf()) {
+    val stack = parametersStack.plus(typeParameters)
+    typeParameters.forEach { it.bindNestedTypeParametersWithWrappingType(stack) }
+    expandedType?.bindNestedTypeParametersWithWrappingType(stack)
+    underlyingType?.bindNestedTypeParametersWithWrappingType(stack)
+}
+
+fun KotlinValueParameter.bindNestedTypeParametersWithWrappingType(parametersStack: List<KotlinTypeParameter> = listOf()) {
+    type?.bindNestedTypeParametersWithWrappingType(parametersStack)
+    varargType?.bindNestedTypeParametersWithWrappingType(parametersStack)
+}
+
+fun KotlinTypeParameter.bindNestedTypeParametersWithWrappingType(parametersStack: List<KotlinTypeParameter> = listOf()) {
+    upperBound?.bindNestedTypeParametersWithWrappingType(parametersStack)
 }
